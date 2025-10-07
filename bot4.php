@@ -343,6 +343,23 @@ function make_request($method, $data) {
     return $result ? json_decode($result, true) : false;
 }
 
+// إجابة على callback query
+function answer_callback_query($callback_query_id, $text = null, $show_alert = false) {
+    $data = [
+        'callback_query_id' => $callback_query_id
+    ];
+    
+    if ($text) {
+        $data['text'] = $text;
+    }
+    
+    if ($show_alert) {
+        $data['show_alert'] = $show_alert;
+    }
+    
+    return make_request('answerCallbackQuery', $data);
+}
+
 // الحصول على التحديثات
 function get_updates($offset = 0) {
     $url = "https://api.telegram.org/bot" . TOKEN . "/getUpdates?offset=" . $offset . "&timeout=30";
@@ -437,26 +454,10 @@ function detect_php_requirements($file_path) {
         }
     }
     
-    // اكتشاف دوال PHP المطلوبة
-    if (preg_match_all('/\b(function|use)\s+([a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*)\s*\(/', $content, $matches)) {
-        $required_functions = array_merge($required_functions, $matches[2]);
-    }
-    
-    // اكتشاف كلاسات PHP المطلوبة
-    if (preg_match_all('/\b(?:class|interface|trait)\s+([a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*)/', $content, $matches)) {
-        $required_classes = $matches[1];
-    }
-    
-    // اكتشاف include و require
-    if (preg_match_all('/\b(?:include|require)(?:_once)?\s*[\'"]([^\'"]+\.php)[\'"]/', $content, $matches)) {
-        $required_files = $matches[1];
-    }
-    
     return [
         'extensions' => array_unique($required_extensions),
         'functions' => array_unique($required_functions),
-        'classes' => array_unique($required_classes),
-        'files' => isset($required_files) ? array_unique($required_files) : []
+        'classes' => array_unique($required_classes)
     ];
 }
 
@@ -731,12 +732,18 @@ function edit_message($chat_id, $message_id, $text, $reply_markup = null) {
     return make_request('editMessageText', $data);
 }
 
-// معالجة الردود
+// معالجة الردود - الإصدار المصحح
 function handle_callback_query($callback) {
     $data = $callback['data'];
     $chat_id = $callback['from']['id'];
     $message_id = $callback['message']['message_id'];
     $user_id = $callback['from']['id'];
+    $callback_id = $callback['id'];
+    
+    // الإجابة الفورية على callback query
+    answer_callback_query($callback_id, "🔄 جارٍ المعالجة...");
+    
+    error_log("Callback received: " . $data . " from user: " . $user_id);
     
     switch ($data) {
         case 'upload':
@@ -764,8 +771,10 @@ function handle_callback_query($callback) {
                 global $bot_locked;
                 $bot_locked = true;
                 send_message($chat_id, "🔒 تم قفل البوت.");
+                answer_callback_query($callback_id, "✅ تم قفل البوت", true);
             } else {
                 send_message($chat_id, "⚠️ أنت لست أدمن.");
+                answer_callback_query($callback_id, "❌ ليس لديك صلاحية", true);
             }
             break;
             
@@ -774,8 +783,10 @@ function handle_callback_query($callback) {
                 global $bot_locked;
                 $bot_locked = false;
                 send_message($chat_id, "🔓 تم فتح البوت.");
+                answer_callback_query($callback_id, "✅ تم فتح البوت", true);
             } else {
                 send_message($chat_id, "⚠️ أنت لست أدمن.");
+                answer_callback_query($callback_id, "❌ ليس لديك صلاحية", true);
             }
             break;
             
@@ -783,8 +794,9 @@ function handle_callback_query($callback) {
             if (is_admin($user_id)) {
                 set_user_state($user_id, 'awaiting_broadcast_message');
                 send_message($chat_id, "📢 أرسل الرسالة التي تريد إذاعتها لجميع المستخدمين:");
+                answer_callback_query($callback_id, "📝 أرسل الرسالة الآن", true);
             } else {
-                send_message($chat_id, "⚠️ أنت لست أدمن.");
+                answer_callback_query($callback_id, "❌ ليس لديك صلاحية", true);
             }
             break;
             
@@ -792,8 +804,9 @@ function handle_callback_query($callback) {
             if (is_admin($user_id)) {
                 set_user_state($user_id, 'awaiting_admin_id');
                 send_message($chat_id, "👤 أرسل معرف المستخدم الذي تريد جعله أدمن:");
+                answer_callback_query($callback_id, "🆔 أرسل معرف المستخدم", true);
             } else {
-                send_message($chat_id, "⚠️ أنت لست أدمن.");
+                answer_callback_query($callback_id, "❌ ليس لديك صلاحية", true);
             }
             break;
             
@@ -808,13 +821,15 @@ function handle_callback_query($callback) {
         default:
             if (strpos($data, 'start_') === 0) {
                 $file_name = str_replace('start_', '', $data);
-                start_bot_callback($chat_id, $file_name, $user_id);
+                start_bot_callback($chat_id, $file_name, $user_id, $callback_id);
             } elseif (strpos($data, 'stop_') === 0) {
                 $file_name = str_replace('stop_', '', $data);
-                stop_bot_callback($chat_id, $file_name, $user_id);
+                stop_bot_callback($chat_id, $file_name, $user_id, $callback_id);
             } elseif (strpos($data, 'delete_') === 0) {
                 $file_name = str_replace('delete_', '', $data);
-                delete_bot_callback($chat_id, $message_id, $file_name, $user_id);
+                delete_bot_callback($chat_id, $message_id, $file_name, $user_id, $callback_id);
+            } else {
+                answer_callback_query($callback_id, "❌ أمر غير معروف", true);
             }
             break;
     }
@@ -839,8 +854,12 @@ function handle_text_message($message) {
         
         foreach ($active_users as $user) {
             try {
-                send_message($user, "📢 إشعار من الأدمن:\n\n" . $broadcast_message);
-                $success_count++;
+                $result = send_message($user, "📢 إشعار من الأدمن:\n\n" . $broadcast_message);
+                if ($result && $result['ok']) {
+                    $success_count++;
+                } else {
+                    $fail_count++;
+                }
             } catch (Exception $e) {
                 $fail_count++;
             }
@@ -873,6 +892,9 @@ function handle_text_message($message) {
             send_message($chat_id, "❌ الرجاء إرسال معرف مستخدم صحيح (أرقام فقط).");
         }
         clear_user_state($user_id);
+    } else {
+        // إذا لم يكن في حالة خاصة، عرض القائمة الرئيسية
+        send_message($chat_id, "❓ لم أفهم طلبك. استخدم الأزرار أدناه:", create_main_menu($user_id));
     }
 }
 
@@ -907,11 +929,11 @@ function show_my_files($chat_id, $message_id, $user_id) {
     edit_message($chat_id, $message_id, $files_message, json_encode($keyboard));
 }
 
-function start_bot_callback($chat_id, $file_name, $user_id) {
+function start_bot_callback($chat_id, $file_name, $user_id, $callback_id = null) {
     global $user_files, $uploaded_files_dir;
     
     if (!isset($user_files[$user_id]) || !in_array($file_name, $user_files[$user_id])) {
-        send_message($chat_id, "❌ الملف غير موجود أو ليس لديك صلاحية للتحكم به.");
+        if ($callback_id) answer_callback_query($callback_id, "❌ الملف غير موجود", true);
         return;
     }
     
@@ -933,18 +955,20 @@ function start_bot_callback($chat_id, $file_name, $user_id) {
     }
     
     if ($file_path && file_exists($file_path)) {
+        if ($callback_id) answer_callback_query($callback_id, "🔄 جارٍ التشغيل...", true);
         send_message($chat_id, "🔄 جارٍ تشغيل " . $file_name . "...");
         run_php_script($file_path, $chat_id, $folder_path, $file_name, ['from' => ['id' => $user_id]], $user_id);
     } else {
+        if ($callback_id) answer_callback_query($callback_id, "❌ ملف غير موجود", true);
         send_message($chat_id, "❌ لم يتم العثور على ملف " . $file_name);
     }
 }
 
-function stop_bot_callback($chat_id, $file_name, $user_id) {
+function stop_bot_callback($chat_id, $file_name, $user_id, $callback_id = null) {
     global $active_bots, $user_files;
     
     if (!isset($user_files[$user_id]) || !in_array($file_name, $user_files[$user_id])) {
-        send_message($chat_id, "❌ الملف غير موجود أو ليس لديك صلاحية للتحكم به.");
+        if ($callback_id) answer_callback_query($callback_id, "❌ الملف غير موجود", true);
         return;
     }
     
@@ -953,17 +977,19 @@ function stop_bot_callback($chat_id, $file_name, $user_id) {
         kill_process_tree($process_info['process_id']);
         unset($active_bots[$user_id][$file_name]);
         remove_active_bot($user_id, $file_name);
+        if ($callback_id) answer_callback_query($callback_id, "⏹️ تم الإيقاف", true);
         send_message($chat_id, "⏹️ تم إيقاف " . $file_name);
     } else {
+        if ($callback_id) answer_callback_query($callback_id, "⚠️ غير قيد التشغيل", true);
         send_message($chat_id, "⚠️ البوت " . $file_name . " غير قيد التشغيل");
     }
 }
 
-function delete_bot_callback($chat_id, $message_id, $file_name, $user_id) {
+function delete_bot_callback($chat_id, $message_id, $file_name, $user_id, $callback_id = null) {
     global $active_bots, $user_files, $uploaded_files_dir;
     
     if (!isset($user_files[$user_id]) || !in_array($file_name, $user_files[$user_id])) {
-        send_message($chat_id, "❌ الملف غير موجود أو ليس لديك صلاحية للتحكم به.");
+        if ($callback_id) answer_callback_query($callback_id, "❌ الملف غير موجود", true);
         return;
     }
     
@@ -995,6 +1021,7 @@ function delete_bot_callback($chat_id, $message_id, $file_name, $user_id) {
     }
     remove_user_file_db($user_id, $file_name);
     
+    if ($callback_id) answer_callback_query($callback_id, "🗑️ تم الحذف", true);
     send_message($chat_id, "🗑️ تم حذف " . $file_name);
     show_my_files($chat_id, $message_id, $user_id);
 }
@@ -1204,9 +1231,15 @@ function start_long_polling() {
             foreach ($updates as $update) {
                 $last_update_id = $update['update_id'];
                 process_update($update);
+                
+                // إضافة تأخير بسيط بين معالجة التحديثات
+                usleep(50000);
             }
             
-            usleep(100000);
+            // تأخير أطول إذا لم تكن هناك تحديثات
+            if (empty($updates)) {
+                usleep(100000);
+            }
             
         } catch (Exception $e) {
             error_log("Error in long polling: " . $e->getMessage());
