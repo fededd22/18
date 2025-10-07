@@ -360,19 +360,19 @@ function handle_start($message) {
         
         if (is_admin(ADMIN_ID)) {
             $welcome_message = "🎉 انضم مستخدم جديد إلى البوت!\n\n";
-            $welcome_message .= "👤 الاسم: {$user_name}\n";
-            $welcome_message .= "📌 اليوزر: @{$user_username}\n";
-            $welcome_message .= "🆔 الـ ID: {$user_id}\n";
-            $welcome_message .= "📝 البايو: {$user_bio}\n";
+            $welcome_message .= "👤 الاسم: " . $user_name . "\n";
+            $welcome_message .= "📌 اليوزر: @" . $user_username . "\n";
+            $welcome_message .= "🆔 الـ ID: " . $user_id . "\n";
+            $welcome_message .= "📝 البايو: " . $user_bio . "\n";
             
             send_message(ADMIN_ID, $welcome_message);
         }
     }
     
-    $welcome_message = "〽️┇اهلا بك: {$user_name}\n";
-    $welcome_message .= "🆔┇ايديك: {$user_id}\n";
-    $welcome_message .= "♻️┇يوزرك: @{$user_username}\n";
-    $welcome_message .= "📰┇بايو: {$user_bio}\n\n";
+    $welcome_message = "〽️┇اهلا بك: " . $user_name . "\n";
+    $welcome_message .= "🆔┇ايديك: " . $user_id . "\n";
+    $welcome_message .= "♻️┇يوزرك: @" . $user_username . "\n";
+    $welcome_message .= "📰┇بايو: " . $user_bio . "\n\n";
     $welcome_message .= "〽️ أنا بوت استضافة ملفات PHP 🎗 يمكنك استخدام الأزرار أدناه للتحكم ♻️\n\n";
     $welcome_message .= "📝 يمكنك إرسال الملفات مباشرة بدون استخدام الأزرار!";
 
@@ -407,7 +407,7 @@ function handle_document_auto($message) {
 
         // التحقق إذا كان الملف قيد المعالجة
         if (is_processing_file($user_id, $file_name)) {
-            send_message($chat_id, f"⏳ الملف {$file_name} قيد المعالجة حالياً...");
+            send_message($chat_id, "⏳ الملف " . $file_name . " قيد المعالجة حالياً...");
             return;
         }
 
@@ -415,7 +415,7 @@ function handle_document_auto($message) {
         add_processing_file($user_id, $file_name);
 
         // إرسال رسالة تأكيد الاستلام
-        $processing_response = send_message($chat_id, f"📥 جارٍ معالجة الملف: {$file_name}");
+        $processing_response = send_message($chat_id, "📥 جارٍ معالجة الملف: " . $file_name);
         $processing_msg_id = $processing_response['result']['message_id'] ?? null;
 
         // جلب معلومات الملف
@@ -445,14 +445,16 @@ function handle_document_auto($message) {
         }
 
     } catch (Exception $e) {
-        $error_msg = f"❌ حدث خطأ أثناء معالجة الملف: {$e->getMessage()}";
+        $error_msg = "❌ حدث خطأ أثناء معالجة الملف: " . $e->getMessage();
         send_message($chat_id, $error_msg);
         remove_processing_file($user_id, $file_name);
-        error_log(f"خطأ في handle_document_auto: {$e->getMessage()}");
+        error_log("خطأ في handle_document_auto: " . $e->getMessage());
     }
 }
 
 function process_zip_file($file_content, $file_name, $message, $processing_msg_id, $user_id) {
+    global $uploaded_files_dir, $user_files;
+    
     try {
         $temp_dir = sys_get_temp_dir() . '/' . uniqid('bot_');
         mkdir($temp_dir, 0777, true);
@@ -515,15 +517,17 @@ function process_zip_file($file_content, $file_name, $message, $processing_msg_i
         save_user_file($user_id, $file_name);
         
     } catch (Exception $e) {
-        $error_msg = f"❌ حدث خطأ أثناء معالجة الأرشيف: {$e->getMessage()}";
+        $error_msg = "❌ حدث خطأ أثناء معالجة الأرشيف: " . $e->getMessage();
         edit_message($message['chat']['id'], $processing_msg_id, $error_msg);
-        error_log(f"خطأ في process_zip_file: {$e->getMessage()}");
+        error_log("خطأ في process_zip_file: " . $e->getMessage());
     } finally {
         remove_processing_file($user_id, $file_name);
     }
 }
 
 function process_php_file($file_content, $file_name, $message, $processing_msg_id, $user_id) {
+    global $uploaded_files_dir, $user_files;
+    
     try {
         $script_path = $uploaded_files_dir . '/' . $file_name;
         file_put_contents($script_path, $file_content);
@@ -539,21 +543,26 @@ function process_php_file($file_content, $file_name, $message, $processing_msg_i
         save_user_file($user_id, $file_name);
         
     } catch (Exception $e) {
-        $error_msg = f"❌ حدث خطأ أثناء معالجة الملف: {$e->getMessage()}";
+        $error_msg = "❌ حدث خطأ أثناء معالجة الملف: " . $e->getMessage();
         edit_message($message['chat']['id'], $processing_msg_id, $error_msg);
-        error_log(f"خطأ في process_php_file: {$e->getMessage()}");
+        error_log("خطأ في process_php_file: " . $e->getMessage());
     } finally {
         remove_processing_file($user_id, $file_name);
     }
 }
 
 // تعديل رسالة
-function edit_message($chat_id, $message_id, $text) {
+function edit_message($chat_id, $message_id, $text, $reply_markup = null) {
     $data = [
         'chat_id' => $chat_id,
         'message_id' => $message_id,
         'text' => $text
     ];
+    
+    if ($reply_markup) {
+        $data['reply_markup'] = $reply_markup;
+    }
+    
     return make_request('editMessageText', $data);
 }
 
@@ -637,7 +646,7 @@ function handle_callback_query($callback) {
                 stop_bot_callback($chat_id, $file_name, $callback['from']['id']);
             } elseif (strpos($data, 'delete_') === 0) {
                 $file_name = str_replace('delete_', '', $data);
-                delete_bot_callback($chat_id, $file_id, $file_name, $callback['from']['id']);
+                delete_bot_callback($chat_id, $message_id, $file_name, $callback['from']['id']);
             }
             break;
     }
@@ -656,14 +665,14 @@ function show_my_files($chat_id, $message_id, $user_id) {
     
     foreach ($user_files[$user_id] as $file_name) {
         $status = get_bot_status($file_name, $user_id);
-        $files_message .= f"📄 {$file_name} - {$status}\n";
+        $files_message .= "📄 " . $file_name . " - " . $status . "\n";
         
         if (is_bot_running($file_name, $user_id)) {
-            $stop_button = ['text' => f"⏹️ إيقاف {$file_name}", 'callback_data' => f'stop_{$file_name}'];
+            $stop_button = ['text' => "⏹️ إيقاف " . $file_name, 'callback_data' => 'stop_' . $file_name];
             $keyboard['inline_keyboard'][] = [$stop_button];
         } else {
-            $start_button = ['text' => f"▶️ تشغيل {$file_name}", 'callback_data' => f'start_{$file_name}'];
-            $delete_button = ['text' => f"🗑️ حذف {$file_name}", 'callback_data' => f'delete_{$file_name}'];
+            $start_button = ['text' => "▶️ تشغيل " . $file_name, 'callback_data' => 'start_' . $file_name];
+            $delete_button = ['text' => "🗑️ حذف " . $file_name, 'callback_data' => 'delete_' . $file_name];
             $keyboard['inline_keyboard'][] = [$start_button, $delete_button];
         }
     }
@@ -675,7 +684,7 @@ function show_my_files($chat_id, $message_id, $user_id) {
 }
 
 function start_bot_callback($chat_id, $file_name, $user_id) {
-    global $user_files;
+    global $user_files, $uploaded_files_dir;
     
     if (!isset($user_files[$user_id]) || !in_array($file_name, $user_files[$user_id])) {
         send_message($chat_id, "❌ الملف غير موجود أو ليس لديك صلاحية للتحكم به.");
@@ -700,13 +709,13 @@ function start_bot_callback($chat_id, $file_name, $user_id) {
     }
     
     if ($file_path && file_exists($file_path)) {
-        send_message($chat_id, f"🔄 جارٍ تشغيل {$file_name}...");
+        send_message($chat_id, "🔄 جارٍ تشغيل " . $file_name . "...");
         run_php_script($file_path, $chat_id, $folder_path, $file_name, ['from' => ['id' => $user_id]], $user_id);
         sleep(2);
         // إعادة تحميل قائمة الملفات
         // يمكن إضافة تحديث للرسالة هنا
     } else {
-        send_message($chat_id, f"❌ لم يتم العثور على ملف {$file_name}");
+        send_message($chat_id, "❌ لم يتم العثور على ملف " . $file_name);
     }
 }
 
@@ -723,14 +732,14 @@ function stop_bot_callback($chat_id, $file_name, $user_id) {
         kill_process_tree($process_info['process_id']);
         unset($active_bots[$user_id][$file_name]);
         remove_active_bot($user_id, $file_name);
-        send_message($chat_id, f"⏹️ تم إيقاف {$file_name}");
+        send_message($chat_id, "⏹️ تم إيقاف " . $file_name);
     } else {
-        send_message($chat_id, f"⚠️ البوت {$file_name} غير قيد التشغيل");
+        send_message($chat_id, "⚠️ البوت " . $file_name . " غير قيد التشغيل");
     }
 }
 
 function delete_bot_callback($chat_id, $message_id, $file_name, $user_id) {
-    global $active_bots, $user_files;
+    global $active_bots, $user_files, $uploaded_files_dir;
     
     if (!isset($user_files[$user_id]) || !in_array($file_name, $user_files[$user_id])) {
         send_message($chat_id, "❌ الملف غير موجود أو ليس لديك صلاحية للتحكم به.");
@@ -765,12 +774,14 @@ function delete_bot_callback($chat_id, $message_id, $file_name, $user_id) {
     }
     remove_user_file_db($user_id, $file_name);
     
-    send_message($chat_id, f"🗑️ تم حذف {$file_name}");
+    send_message($chat_id, "🗑️ تم حذف " . $file_name);
     show_my_files($chat_id, $message_id, $user_id);
 }
 
 // تشغيل ملف PHP
 function run_php_script($script_path, $chat_id, $folder_path, $file_name, $original_message, $user_id) {
+    global $active_bots;
+    
     try {
         // إيقاف البوت إذا كان يعمل
         if (isset($active_bots[$user_id][$file_name])) {
@@ -805,7 +816,7 @@ function run_php_script($script_path, $chat_id, $folder_path, $file_name, $origi
             $monitor_thread = function() use ($process_id, $file_name, $user_id, $chat_id) {
                 sleep(10); // انتظر 10 ثواني
                 if (!is_process_running($process_id)) {
-                    send_message($chat_id, f"❌ فشل تشغيل البوت {$file_name}");
+                    send_message($chat_id, "❌ فشل تشغيل البوت " . $file_name);
                     if (isset($active_bots[$user_id][$file_name])) {
                         unset($active_bots[$user_id][$file_name]);
                     }
@@ -835,9 +846,9 @@ function run_php_script($script_path, $chat_id, $folder_path, $file_name, $origi
                 $bot_info = json_decode(file_get_contents($bot_info_url), true);
                 $bot_username = $bot_info['ok'] ? $bot_info['result']['username'] : "غير معروف";
                 
-                $caption = f"📤 قام المستخدم {$user_info} برفع ملف بوت جديد. معرف البوت: @{$bot_username}";
+                $caption = "📤 قام المستخدم " . $user_info . " برفع ملف بوت جديد. معرف البوت: @" . $bot_username;
             } else {
-                $caption = f"📤 قام المستخدم {$user_info} برفع ملف بوت جديد، ولكن لم أتمكن من جلب معرف البوت.";
+                $caption = "📤 قام المستخدم " . $user_info . " برفع ملف بوت جديد، ولكن لم أتمكن من جلب معرف البوت.";
             }
             
             // إرسال الملف إلى الأدمن
@@ -857,21 +868,21 @@ function run_php_script($script_path, $chat_id, $folder_path, $file_name, $origi
             
             $keyboard = [
                 'inline_keyboard' => [
-                    [['text' => f"🔴 إيقاف {$file_name}", 'callback_data' => f'stop_{$file_name}']]
+                    [['text' => "🔴 إيقاف " . $file_name, 'callback_data' => 'stop_' . $file_name]]
                 ]
             ];
             
-            send_message($chat_id, f"✅ تم تشغيل البوت بنجاح!\nاستخدم الأزرار أدناه للتحكم في البوت 👇", json_encode($keyboard));
+            send_message($chat_id, "✅ تم تشغيل البوت بنجاح!\nاستخدم الأزرار أدناه للتحكم في البوت 👇", json_encode($keyboard));
             
         } else {
-            send_message($chat_id, f"❌ فشل تشغيل البوت {$file_name}");
+            send_message($chat_id, "❌ فشل تشغيل البوت " . $file_name);
         }
         
     } catch (Exception $e) {
-        $error_msg = f"❌ حدث خطأ أثناء تشغيل البوت {$file_name}:\n\n📝 الخطأ: {$e->getMessage()}";
+        $error_msg = "❌ حدث خطأ أثناء تشغيل البوت " . $file_name . ":\n\n📝 الخطأ: " . $e->getMessage();
         send_message($chat_id, $error_msg);
         if (is_admin(ADMIN_ID)) {
-            send_message(ADMIN_ID, f"❌ فشل تشغيل بوت: {$file_name}\nالمستخدم: {$user_id}\nالخطأ: {$e->getMessage()}");
+            send_message(ADMIN_ID, "❌ فشل تشغيل بوت: " . $file_name . "\nالمستخدم: " . $user_id . "\nالخطأ: " . $e->getMessage());
         }
     }
 }
@@ -891,7 +902,7 @@ function extract_token_from_script($script_path) {
             }
         }
     } catch (Exception $e) {
-        error_log(f"[ERROR] فشل في استخراج التوكن من {$script_path}: {$e->getMessage()}");
+        error_log("[ERROR] فشل في استخراج التوكن من " . $script_path . ": " . $e->getMessage());
     }
     return null;
 }
@@ -955,7 +966,7 @@ function verify_token() {
     
     if ($response && $response['ok']) {
         $bot_username = $response['result']['username'];
-        echo "✅ البوت يعمل: @{$bot_username}\n";
+        echo "✅ البوت يعمل: @" . $bot_username . "\n";
         return true;
     } else {
         echo "❌ فشل التحقق من التوكن. تأكد من صحة التوكن.\n";
